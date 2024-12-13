@@ -26,13 +26,23 @@ def fetch_bls_data(series_id, start_year, end_year):
     if response.status_code == 200:
         data = response.json()
         if data["status"] == "REQUEST_SUCCEEDED":
-            print(f"Data fetched for {series_id}: {len(data['Results']['series'][0]['data'])} records.")
-            return pd.DataFrame(data["Results"]["series"][0]["data"])
+            if data["Results"]["series"][0]["data"]:
+                print(f"Data fetched for {series_id}: {len(data['Results']['series'][0]['data'])} records.")
+                return pd.DataFrame(data["Results"]["series"][0]["data"])
+            else:
+                print(f"No records found for {series_id}. Skipping...")
         else:
             print(f"Error for {series_id}: {data.get('message', 'No message provided')}")
     else:
         print(f"HTTP Error for {series_id}: {response.status_code}")
     return None
+
+def convert_date(row):
+    """Convert BLS period and year to datetime."""
+    try:
+        return pd.to_datetime(f"{row['year']}-{row['period'][1:]}-01", format="%Y-%m-%d")
+    except Exception:
+        return None
 
 def collect_data():
     """Collect data for all series."""
@@ -44,11 +54,12 @@ def collect_data():
         print(f"Fetching data for {name}...")
         df = fetch_bls_data(series_id, start_year, current_year)
         if df is not None and not df.empty:
-            df["date"] = pd.to_datetime(df["year"] + "-" + df["period"].str[1:] + "-01", errors="coerce")
+            df["date"] = df.apply(convert_date, axis=1)
             df = df.dropna(subset=["date"])  # Drop invalid dates
             df["series"] = name
             df = df[["date", "value", "series"]]
             all_data[name] = df
+            print(f"Fetched {len(df)} records for {name}.")
         else:
             print(f"No data returned for {name}. Skipping...")
 
